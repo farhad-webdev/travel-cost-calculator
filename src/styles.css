@@ -114,6 +114,22 @@ td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: middle;
 .sources { font-size: 12px; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .sources a { color: var(--accent); font-weight: 600; }
 
+.sselect { position: relative; }
+.sselect input {
+  width: 100%; padding: 9px 10px; font-size: 14px;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink);
+}
+.sselect-list {
+  position: absolute; z-index: 60; left: 0; right: 0; top: calc(100% + 4px);
+  max-height: 240px; overflow-y: auto; background: #fff;
+  border: 1px solid var(--line); border-radius: 10px; margin: 0; padding: 4px;
+  list-style: none; box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+.sselect-list li { padding: 9px 10px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+.sselect-list li:hover { background: #eef3f2; }
+.sselect-list li.sel { background: #e2f2ee; font-weight: 600; }
+.sselect-empty { color: var(--muted); cursor: default !important; }
+
 .custom-add { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 4px; }
 .custom-grid { display: grid; grid-template-columns: 2fr 1fr 0.7fr 1fr auto; gap: 8px; align-items: center; }
 .custom-grid .num { max-width: none; }

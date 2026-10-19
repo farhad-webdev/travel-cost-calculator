@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import TripMap from './components/TripMap.jsx';
+import SearchableSelect from './components/SearchableSelect.jsx';
 import { getLivePrices } from './lib/gemini.js';
 import {
   DESTINATIONS,
@@ -172,22 +173,27 @@ export default function App() {
         country: dest.country,
         international: dest.type === 'international',
       });
-      setAiResult({ ...data, at: new Date().toLocaleString() });
+      // Auto-apply live data into the estimate (user can still edit everything)
+      const aiMap = {};
+      (data.transport || []).forEach((t) => {
+        aiMap[t.mode] = t;
+      });
+      setAiFares(aiMap);
+      const modes = (data.transport || []).map((t) => t.mode);
+      if (modes.length) setGetThereMode(modes.includes(getThereMode) ? getThereMode : modes[0]);
+      if (data.hotel_per_night) applyAiMoney('hotel', data.hotel_per_night);
+      if (data.food_per_day) applyAiMoney('food', data.food_per_day);
+      setUnitOv((p) => {
+        const n = { ...p };
+        delete n.getthere;
+        return n;
+      });
+      setAiResult({ ...data, at: new Date().toLocaleString(), applied: true });
     } catch (e) {
       setAiError(e.message || 'Failed to fetch live prices.');
     } finally {
       setAiLoading(false);
     }
-  };
-
-  const applyAiTransport = (t) => {
-    setAiFares((p) => ({ ...(p || {}), [t.mode]: t }));
-    setGetThereMode(t.mode);
-    setUnitOv((p) => {
-      const n = { ...p };
-      delete n.getthere;
-      return n;
-    });
   };
 
   const applyAiMoney = (field, m) => {
@@ -212,7 +218,8 @@ export default function App() {
       { id: 'activities', name: 'Activities & Sightseeing', unit: costs.activities, qty: days, appliesTo: 'person', note: `${days} day(s)` },
     ];
     if (dest.type === 'international') {
-      base.push({ id: 'visa', name: 'Visa Fee', unit: costs.visa, qty: 1, appliesTo: 'person', note: 'per person' });
+      const vNote = dest.visaNote ? `Visa policy: ${dest.visaNote}` : 'per person';
+      base.push({ id: 'visa', name: 'Visa Fee', unit: costs.visa, qty: 1, appliesTo: 'person', note: vNote });
     }
     // ---- Getting there: unified Flight / Bus / Train options ----
     const gtOpts = [];
@@ -401,11 +408,16 @@ export default function App() {
           <div className="row2">
             <label className="field">
               <span>Destination</span>
-              <select value={destinationId} onChange={(e) => changeDestination(e.target.value)}>
-                {DESTINATIONS.filter((d) => d.type === mode).map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}{d.type === 'international' ? `, ${d.country}` : ''}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                options={DESTINATIONS.filter((d) => d.type === mode).map((d) => ({
+                  id: d.id,
+                  name: d.name,
+                  country: d.type === 'international' ? d.country : '',
+                }))}
+                value={destinationId}
+                onChange={changeDestination}
+                placeholder="Search destination…"
+              />
             </label>
             <label className="field">
               <span>{mode === 'domestic' ? 'Starting from' : 'Flying from'}</span>
@@ -486,6 +498,7 @@ export default function App() {
             {aiError && <p className="err">{aiError}</p>}
             {aiResult && (
               <div className="aires">
+                <p className="hint" style={{ margin: 0 }}>Live prices applied below — edit any value freely.</p>
                 {(aiResult.transport || []).map((t, i) => (
                   <div className="airow" key={i}>
                     <div>
@@ -493,7 +506,7 @@ export default function App() {
                       {t.currency === 'BDT' ? '৳' : '$'}{Number(t.fare).toLocaleString('en-US')}
                       {t.detail && <div className="cellnote">{t.detail}</div>}
                     </div>
-                    <button className="btn ghost sm" onClick={() => applyAiTransport(t)}>Use</button>
+                    <span className="pill live">Applied</span>
                   </div>
                 ))}
                 {aiResult.hotel_per_night && aiResult.hotel_per_night.amount > 0 && (
@@ -501,7 +514,7 @@ export default function App() {
                     <div>
                       Hotel <strong>{aiResult.hotel_per_night.currency === 'BDT' ? '৳' : '$'}{Number(aiResult.hotel_per_night.amount).toLocaleString('en-US')}</strong> / night
                     </div>
-                    <button className="btn ghost sm" onClick={() => applyAiMoney('hotel', aiResult.hotel_per_night)}>Apply</button>
+                    <span className="pill live">Applied</span>
                   </div>
                 )}
                 {aiResult.food_per_day && aiResult.food_per_day.amount > 0 && (
@@ -509,7 +522,7 @@ export default function App() {
                     <div>
                       Food <strong>{aiResult.food_per_day.currency === 'BDT' ? '৳' : '$'}{Number(aiResult.food_per_day.amount).toLocaleString('en-US')}</strong> / day
                     </div>
-                    <button className="btn ghost sm" onClick={() => applyAiMoney('food', aiResult.food_per_day)}>Apply</button>
+                    <span className="pill live">Applied</span>
                   </div>
                 )}
                 {(aiResult.sources || []).length > 0 && (
@@ -651,7 +664,9 @@ export default function App() {
                         <option value="group">Group</option>
                       </select>
                     </td>
-                    <td className="right strong">{fmt(rowTotal(r))}</td>
+                    <td className="right strong">
+                      {r.id === 'visa' && r.unit === 0 ? 'Free' : fmt(rowTotal(r))}
+                    </td>
                     <td>
                       {r.custom && (
                         <button className="iconbtn" title="Remove" onClick={() => setCustomRows((p) => p.filter((x) => x.id !== r.id))}>×</button>
