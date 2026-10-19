@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import TripMap from './components/TripMap.jsx';
+import { getLivePrices } from './lib/gemini.js';
 import {
   DESTINATIONS,
   STYLE_MULTIPLIERS,
@@ -65,7 +66,16 @@ export default function App() {
   const [customRows, setCustomRows] = useState([]);
   const [newCustom, setNewCustom] = useState({ name: '', unit: '', qty: 1, appliesTo: 'group' });
   const [contingency, setContingency] = useState(10);
-  const [getThereMode, setGetThereMode] = useState('flight'); // 'flight' | 'bus' | 'train' (land-reachable destinations)
+  const [getThereMode, setGetThereMode] = useState('bus'); // 'flight' | 'bus' | 'train'
+  // Gemini live prices (BYOK — key lives in this browser only)
+  const [apiKey, setApiKey] = useState(() => {
+    try { return localStorage.getItem('tcc-gemini-key') || ''; } catch { return ''; }
+  });
+  const [showSettings, setShowSettings] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [aiResult, setAiResult] = useState(null);
+  const [aiFares, setAiFares] = useState(null); // { bus: {fare, currency, detail}, ... }
   const [savedTrips, setSavedTrips] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('tcc-trips-v1') || '[]');
@@ -98,12 +108,24 @@ export default function App() {
     } catch {}
   }, [savedTrips]);
 
+  // Persist Gemini key in this browser only
+  useEffect(() => {
+    try { localStorage.setItem('tcc-gemini-key', apiKey); } catch {}
+  }, [apiKey]);
+
+  const resetAi = () => {
+    setAiFares(null);
+    setAiResult(null);
+    setAiError('');
+  };
+
   const switchMode = (m) => {
     setMode(m);
     const first = DESTINATIONS.find((d) => d.type === m);
     setDestinationId(first.id);
     setCosts(suggestedCosts(first, style));
-    setGetThereMode('flight');
+    setGetThereMode(first.type === 'international' ? 'flight' : 'bus');
+    resetAi();
     setUnitOv({});
     setQtyOv({});
     setAppliesOv({});
@@ -113,7 +135,8 @@ export default function App() {
     const d = DESTINATIONS.find((x) => x.id === id);
     setDestinationId(id);
     setCosts(suggestedCosts(d, style));
-    setGetThereMode('flight');
+    setGetThereMode(d.type === 'international' ? 'flight' : 'bus');
+    resetAi();
     setUnitOv({});
     setQtyOv({});
     setAppliesOv({});
@@ -129,11 +152,48 @@ export default function App() {
 
   const changeOrigin = (id) => {
     setOriginId(id);
+    resetAi();
     setUnitOv((p) => {
       const n = { ...p };
-      delete n.route;
+      delete n.getthere;
       return n;
     });
+  };
+
+  const fetchLivePrices = async () => {
+    if (!apiKey.trim() || aiLoading) return;
+    setAiLoading(true);
+    setAiError('');
+    try {
+      const data = await getLivePrices({
+        apiKey: apiKey.trim(),
+        originName: origin.name,
+        destName: dest.name,
+        country: dest.country,
+        international: dest.type === 'international',
+      });
+      setAiResult({ ...data, at: new Date().toLocaleString() });
+    } catch (e) {
+      setAiError(e.message || 'Failed to fetch live prices.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const applyAiTransport = (t) => {
+    setAiFares((p) => ({ ...(p || {}), [t.mode]: t }));
+    setGetThereMode(t.mode);
+    setUnitOv((p) => {
+      const n = { ...p };
+      delete n.getthere;
+      return n;
+    });
+  };
+
+  const applyAiMoney = (field, m) => {
+    if (!m) return;
+    const inDest = m.currency === destCurrency ? m.amount : destCurrency === 'BDT' ? m.amount * fx : m.amount / fx;
+    setCosts((p) => ({ ...p, [field]: round2(inDest) }));
   };
 
   const nights = useMemo(() => {
@@ -153,46 +213,73 @@ export default function App() {
     ];
     if (dest.type === 'international') {
       base.push({ id: 'visa', name: 'Visa Fee', unit: costs.visa, qty: 1, appliesTo: 'person', note: 'per person' });
-      let gUnit, gNote;
-      if (dest.land && getThereMode === 'bus') {
-        gUnit = round2(costs.bus / fx);
-        gNote = `Bus · ৳${Number(costs.bus).toLocaleString('en-US')} round trip`;
-      } else if (dest.land && getThereMode === 'train' && costs.train > 0) {
-        gUnit = round2(costs.train / fx);
-        gNote = `Train · ৳${Number(costs.train).toLocaleString('en-US')} round trip`;
-      } else {
-        gUnit = costs.flight;
-        gNote = `Flight · $${Number(costs.flight).toLocaleString('en-US')} round trip`;
+    }
+    // ---- Getting there: unified Flight / Bus / Train options ----
+    const gtOpts = [];
+    if (dest.type === 'international') {
+      gtOpts.push({ mode: 'flight', fare: costs.flight, currency: 'USD', detail: 'Estimated round-trip fare' });
+      if (dest.land) {
+        if (costs.bus > 0) gtOpts.push({ mode: 'bus', fare: costs.bus, currency: 'BDT', detail: 'Estimated' });
+        if (costs.train > 0) gtOpts.push({ mode: 'train', fare: costs.train, currency: 'BDT', detail: 'Estimated' });
       }
-      base.push({
-        id: 'getthere',
-        name: `Getting there (${origin.airport} round trip)`,
-        unit: gUnit,
-        qty: 1,
-        appliesTo: 'person',
-        note: gNote,
-        hasMode: !!dest.land,
-      });
     } else {
       const fareKey = `${originId}>${dest.id}`;
-      const fare = ROUTE_FARES[fareKey] !== undefined ? ROUTE_FARES[fareKey] : FALLBACK_FARE;
-      const isEstimate = ROUTE_FARES[fareKey] === undefined;
-      base.unshift({
-        id: 'route',
-        name: `Travel to ${dest.name} (round trip)`,
-        unit: fare,
-        qty: 1,
-        appliesTo: 'person',
-        note: `${origin.name} → ${dest.name}${isEstimate ? ' · estimate, enter your actual fare' : ''}`,
+      const baseFare = ROUTE_FARES[fareKey];
+      gtOpts.push({
+        mode: 'bus',
+        fare: baseFare !== undefined ? baseFare : FALLBACK_FARE,
+        currency: 'BDT',
+        detail: baseFare !== undefined ? 'Researched baseline' : 'Estimate — verify',
       });
     }
+    if (aiFares) {
+      for (const m of ['bus', 'train', 'flight']) {
+        if (aiFares[m]) {
+          const entry = {
+            mode: m,
+            fare: aiFares[m].fare,
+            currency: aiFares[m].currency,
+            detail: aiFares[m].detail || 'Live via AI search',
+          };
+          const ix = gtOpts.findIndex((o) => o.mode === m);
+          if (ix >= 0) gtOpts[ix] = entry;
+          else gtOpts.push(entry);
+        }
+      }
+    }
+    const modeOrder = ['flight', 'bus', 'train'];
+    gtOpts.sort((a, b) => modeOrder.indexOf(a.mode) - modeOrder.indexOf(b.mode));
+    const selMode = gtOpts.some((o) => o.mode === getThereMode) ? getThereMode : gtOpts[0].mode;
+    const sel = gtOpts.find((o) => o.mode === selMode);
+    const toDestCur = (fare, cur) => {
+      if (cur === destCurrency) return fare;
+      return destCurrency === 'BDT' ? fare * fx : fare / fx;
+    };
+    const selSym = sel.currency === 'BDT' ? '৳' : '$';
+    const cap = (s) => s[0].toUpperCase() + s.slice(1);
+    base.unshift({
+      id: 'getthere',
+      name:
+        dest.type === 'international'
+          ? `Getting there (${origin.airport} round trip)`
+          : `Travel to ${dest.name} (round trip)`,
+      unit: round2(toDestCur(sel.fare, sel.currency)),
+      qty: 1,
+      appliesTo: 'person',
+      note:
+        (dest.type === 'domestic' ? `${origin.name} → ${dest.name} · ` : '') +
+        `${cap(sel.mode)} · ${selSym}${Number(sel.fare).toLocaleString('en-US')}${sel.detail ? ` — ${sel.detail}` : ''}`,
+      hasMode: gtOpts.length > 1,
+      modes: gtOpts.map((o) => o.mode),
+      selMode,
+    });
     return base.map((r) => ({
       ...r,
       unit: unitOv[r.id] !== undefined ? unitOv[r.id] : r.unit,
       qty: qtyOv[r.id] !== undefined ? qtyOv[r.id] : r.qty,
       appliesTo: appliesOv[r.id] || r.appliesTo,
     }));
-  }, [costs, nights, days, rooms, dest.type, dest.id, dest.name, originId, origin.name, origin.airport, getThereMode, fx, unitOv, qtyOv, appliesOv]);
+  }, [costs, nights, days, rooms, dest.type, dest.id, dest.name, originId, origin.name, origin.airport, getThereMode, fx, aiFares, unitOv, qtyOv, appliesOv]);
 
   const allRows = useMemo(
     () => [
@@ -369,6 +456,74 @@ export default function App() {
               ))}
             </div>
           </div>
+
+          <div className="aibox">
+            <div className="fxrow">
+              <span>Live prices (Gemini AI)</span>
+              {aiResult && <span className="pill live">Live</span>}
+            </div>
+            <div className="ai-actions">
+              <button className="btn primary sm" disabled={aiLoading || !apiKey.trim()} onClick={fetchLivePrices}>
+                {aiLoading ? 'Searching live fares…' : 'Fetch live prices'}
+              </button>
+              <button className="btn ghost sm" onClick={() => setShowSettings((s) => !s)}>API key</button>
+            </div>
+            {!apiKey.trim() && (
+              <p className="hint">Add your Gemini API key to fetch real-time fares via AI web search. The key stays in this browser only.</p>
+            )}
+            {showSettings && (
+              <label className="field" style={{ marginTop: 10 }}>
+                <span>Gemini API key (stored only in this browser)</span>
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="AIza…"
+                  autoComplete="off"
+                />
+              </label>
+            )}
+            {aiError && <p className="err">{aiError}</p>}
+            {aiResult && (
+              <div className="aires">
+                {(aiResult.transport || []).map((t, i) => (
+                  <div className="airow" key={i}>
+                    <div>
+                      <strong className="cap">{t.mode}</strong>{' '}
+                      {t.currency === 'BDT' ? '৳' : '$'}{Number(t.fare).toLocaleString('en-US')}
+                      {t.detail && <div className="cellnote">{t.detail}</div>}
+                    </div>
+                    <button className="btn ghost sm" onClick={() => applyAiTransport(t)}>Use</button>
+                  </div>
+                ))}
+                {aiResult.hotel_per_night && aiResult.hotel_per_night.amount > 0 && (
+                  <div className="airow">
+                    <div>
+                      Hotel <strong>{aiResult.hotel_per_night.currency === 'BDT' ? '৳' : '$'}{Number(aiResult.hotel_per_night.amount).toLocaleString('en-US')}</strong> / night
+                    </div>
+                    <button className="btn ghost sm" onClick={() => applyAiMoney('hotel', aiResult.hotel_per_night)}>Apply</button>
+                  </div>
+                )}
+                {aiResult.food_per_day && aiResult.food_per_day.amount > 0 && (
+                  <div className="airow">
+                    <div>
+                      Food <strong>{aiResult.food_per_day.currency === 'BDT' ? '৳' : '$'}{Number(aiResult.food_per_day.amount).toLocaleString('en-US')}</strong> / day
+                    </div>
+                    <button className="btn ghost sm" onClick={() => applyAiMoney('food', aiResult.food_per_day)}>Apply</button>
+                  </div>
+                )}
+                {(aiResult.sources || []).length > 0 && (
+                  <div className="sources">
+                    <span>Sources:</span>
+                    {aiResult.sources.map((u, i) => (
+                      <a key={i} href={u} target="_blank" rel="noreferrer">[{i + 1}]</a>
+                    ))}
+                  </div>
+                )}
+                <div className="cellnote">Fetched {aiResult.at} · AI-grounded web search — verify before booking.</div>
+              </div>
+            )}
+          </div>
         </section>
 
         {/* ---------- Suggested costs ---------- */}
@@ -452,15 +607,15 @@ export default function App() {
                       {r.hasMode && (
                         <select
                           className="modesel"
-                          value={getThereMode}
+                          value={r.selMode}
                           onChange={(e) => {
                             setGetThereMode(e.target.value);
                             setUnitOv((p) => { const n = { ...p }; delete n.getthere; return n; });
                           }}
                         >
-                          <option value="flight">Flight</option>
-                          <option value="bus">Bus</option>
-                          {dest.land.train > 0 && <option value="train">Train</option>}
+                          {r.modes.map((m) => (
+                            <option key={m} value={m}>{m[0].toUpperCase() + m.slice(1)}</option>
+                          ))}
                         </select>
                       )}
                     </td>
