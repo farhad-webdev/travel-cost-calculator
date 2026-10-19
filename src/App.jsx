@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import TripMap from './components/TripMap.jsx';
 import {
   DESTINATIONS,
   STYLE_MULTIPLIERS,
@@ -418,6 +419,18 @@ export default function App() {
             <a href={flightUrl} target="_blank" rel="noreferrer">Flights {origin.airport} → {dest.airport}</a>
             <a href={hotelUrl} target="_blank" rel="noreferrer">Hotels in {dest.name}</a>
           </div>
+        </section>
+
+        {/* ---------- Map ---------- */}
+        <section className="card wide no-print">
+          <h2>Pick on the map</h2>
+          <p className="hint">Click a green marker to set the destination. The orange marker is your origin — the dashed line shows your route.</p>
+          <TripMap
+            destinations={DESTINATIONS.filter((d) => d.type === mode)}
+            selectedId={destinationId}
+            origin={origin}
+            onSelect={changeDestination}
+          />
         </section>
 
         {/* ---------- Expenses ---------- */}

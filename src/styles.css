@@ -98,6 +98,9 @@ td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: middle;
   border: 1px solid var(--line); border-radius: 8px; background: #eef3f2; color: var(--ink);
 }
 
+.tripmap { height: 380px; border-radius: 10px; z-index: 0; }
+.tripmap .leaflet-container { font-family: inherit; }
+
 .custom-add { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 4px; }
 .custom-grid { display: grid; grid-template-columns: 2fr 1fr 0.7fr 1fr auto; gap: 8px; align-items: center; }
 .custom-grid .num { max-width: none; }
