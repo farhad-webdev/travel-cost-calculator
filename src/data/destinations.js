@@ -27,6 +27,11 @@ export const DESTINATIONS = [
   { id: 'sundarbans', name: 'Sundarbans', country: 'Bangladesh', type: 'domestic', currency: 'BDT', airport: 'JSR', bookingQuery: 'Sundarbans Bangladesh', hotel: 3500, food: 1400, transport: 2500, activities: 1000 },
   { id: 'kuakata', name: 'Kuakata', country: 'Bangladesh', type: 'domestic', currency: 'BDT', airport: 'BZL', bookingQuery: 'Kuakata', hotel: 2200, food: 900, transport: 700, activities: 500 },
   { id: 'dhaka', name: 'Dhaka', country: 'Bangladesh', type: 'domestic', currency: 'BDT', airport: 'DAC', bookingQuery: 'Dhaka', hotel: 4500, food: 1500, transport: 1200, activities: 1000 },
+  { id: 'khagrachari', name: 'Khagrachari (Sajek Valley)', country: 'Bangladesh', type: 'domestic', currency: 'BDT', airport: 'CGP', bookingQuery: 'Sajek Valley', hotel: 3000, food: 1000, transport: 1800, activities: 800 },
+  { id: 'chattogram', name: 'Chattogram', country: 'Bangladesh', type: 'domestic', currency: 'BDT', airport: 'CGP', bookingQuery: 'Chattogram', hotel: 3500, food: 1200, transport: 1000, activities: 700 },
+  { id: 'barishal', name: 'Barishal', country: 'Bangladesh', type: 'domestic', currency: 'BDT', airport: 'BZL', bookingQuery: 'Barishal', hotel: 2200, food: 900, transport: 700, activities: 500 },
+  { id: 'rajshahi', name: 'Rajshahi', country: 'Bangladesh', type: 'domestic', currency: 'BDT', airport: 'RJH', bookingQuery: 'Rajshahi', hotel: 2500, food: 900, transport: 800, activities: 600 },
+  { id: 'khulna', name: 'Khulna', country: 'Bangladesh', type: 'domestic', currency: 'BDT', airport: 'JSR', bookingQuery: 'Khulna', hotel: 2500, food: 900, transport: 800, activities: 600 },
 
   // ---------- International, USD ----------
   { id: 'bangkok', name: 'Bangkok', country: 'Thailand', type: 'international', currency: 'USD', airport: 'BKK', bookingQuery: 'Bangkok', hotel: 55, food: 28, transport: 10, activities: 15, visa: 40, flight: 320 },
@@ -43,6 +48,21 @@ export const DESTINATIONS = [
   { id: 'london', name: 'London', country: 'United Kingdom', type: 'international', currency: 'USD', airport: 'LHR', bookingQuery: 'London', hotel: 135, food: 55, transport: 22, activities: 35, visa: 150, flight: 700 },
   { id: 'tokyo', name: 'Tokyo', country: 'Japan', type: 'international', currency: 'USD', airport: 'HND', bookingQuery: 'Tokyo', hotel: 105, food: 42, transport: 18, activities: 30, visa: 30, flight: 650 },
   { id: 'new-york', name: 'New York', country: 'USA', type: 'international', currency: 'USD', airport: 'JFK', bookingQuery: 'New York', hotel: 165, food: 55, transport: 22, activities: 40, visa: 185, flight: 900 },
+  { id: 'pattaya', name: 'Pattaya', country: 'Thailand', type: 'international', currency: 'USD', airport: 'UTP', bookingQuery: 'Pattaya', hotel: 40, food: 22, transport: 10, activities: 18, visa: 40, flight: 320 },
+  { id: 'phuket', name: 'Phuket', country: 'Thailand', type: 'international', currency: 'USD', airport: 'HKT', bookingQuery: 'Phuket', hotel: 50, food: 25, transport: 12, activities: 22, visa: 40, flight: 340 },
+  { id: 'hanoi', name: 'Hanoi', country: 'Vietnam', type: 'international', currency: 'USD', airport: 'HAN', bookingQuery: 'Hanoi', hotel: 35, food: 18, transport: 10, activities: 15, visa: 25, flight: 400 },
+  { id: 'colombo', name: 'Colombo', country: 'Sri Lanka', type: 'international', currency: 'USD', airport: 'CMB', bookingQuery: 'Colombo', hotel: 35, food: 18, transport: 10, activities: 12, visa: 35, flight: 300 },
+  { id: 'paro', name: 'Paro', country: 'Bhutan', type: 'international', currency: 'USD', airport: 'PBH', bookingQuery: 'Paro Bhutan', hotel: 45, food: 25, transport: 15, activities: 20, visa: 40, flight: 350, land: { bus: 6000, train: 0 } },
+  { id: 'hong-kong', name: 'Hong Kong', country: 'China', type: 'international', currency: 'USD', airport: 'HKG', bookingQuery: 'Hong Kong', hotel: 110, food: 40, transport: 15, activities: 25, visa: 30, flight: 450 },
+  { id: 'seoul', name: 'Seoul', country: 'South Korea', type: 'international', currency: 'USD', airport: 'ICN', bookingQuery: 'Seoul', hotel: 95, food: 38, transport: 15, activities: 25, visa: 40, flight: 600 },
+  { id: 'sydney', name: 'Sydney', country: 'Australia', type: 'international', currency: 'USD', airport: 'SYD', bookingQuery: 'Sydney', hotel: 120, food: 45, transport: 18, activities: 30, visa: 140, flight: 800 },
+  { id: 'cairo', name: 'Cairo', country: 'Egypt', type: 'international', currency: 'USD', airport: 'CAI', bookingQuery: 'Cairo', hotel: 45, food: 20, transport: 10, activities: 18, visa: 25, flight: 550 },
+  { id: 'cape-town', name: 'Cape Town', country: 'South Africa', type: 'international', currency: 'USD', airport: 'CPT', bookingQuery: 'Cape Town', hotel: 70, food: 30, transport: 12, activities: 22, visa: 50, flight: 850 },
+  { id: 'paris', name: 'Paris', country: 'France', type: 'international', currency: 'USD', airport: 'CDG', bookingQuery: 'Paris', hotel: 140, food: 50, transport: 20, activities: 35, visa: 90, flight: 650 },
+  { id: 'rome', name: 'Rome', country: 'Italy', type: 'international', currency: 'USD', airport: 'FCO', bookingQuery: 'Rome', hotel: 110, food: 42, transport: 15, activities: 28, visa: 90, flight: 620 },
+  { id: 'amsterdam', name: 'Amsterdam', country: 'Netherlands', type: 'international', currency: 'USD', airport: 'AMS', bookingQuery: 'Amsterdam', hotel: 130, food: 45, transport: 18, activities: 25, visa: 90, flight: 640 },
+  { id: 'toronto', name: 'Toronto', country: 'Canada', type: 'international', currency: 'USD', airport: 'YYZ', bookingQuery: 'Toronto', hotel: 120, food: 45, transport: 18, activities: 25, visa: 100, flight: 950 },
+  { id: 'los-angeles', name: 'Los Angeles', country: 'USA', type: 'international', currency: 'USD', airport: 'LAX', bookingQuery: 'Los Angeles', hotel: 150, food: 50, transport: 20, activities: 35, visa: 185, flight: 950 },
 ];
 
 export const DEFAULT_FX = 121.5; // USD -> BDT fallback when the live rate cannot be fetched
@@ -81,5 +101,15 @@ export const ROUTE_FARES = {
   'sylhet>sreemangal': 600,
   'sylhet>dhaka': 1600,
   'sylhet>coxs-bazar': 5400,
+  'dhaka>khagrachari': 3400,
+  'dhaka>chattogram': 1600,
+  'dhaka>barishal': 1400,
+  'dhaka>rajshahi': 1400,
+  'dhaka>khulna': 1200,
+  'chattogram>khagrachari': 800,
+  'chattogram>chattogram': 0,
+  'chattogram>barishal': 3000,
+  'chattogram>rajshahi': 3400,
+  'chattogram>khulna': 2600,
 };
 export const FALLBACK_FARE = 2000; // used when a route has no researched fare
