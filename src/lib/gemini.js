@@ -1,8 +1,10 @@
 // Gemini live-price fetcher with Google Search grounding.
 // The API key is supplied by the user in the app (BYOK) and never leaves their browser.
 
-const MODEL = 'gemini-2.5-flash';
-const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash']; // fallback chain
+const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function buildPrompt({ originName, destName, country, international }) {
   const route = international
@@ -29,6 +31,14 @@ function parseJson(text) {
 
 const VALID_MODES = ['bus', 'train', 'flight'];
 
+async function callGemini(model, apiKey, body) {
+  return fetch(`${API_BASE}/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
 export async function getLivePrices({ apiKey, originName, destName, country, international }) {
   if (!apiKey) throw new Error('API key missing.');
 
@@ -38,29 +48,65 @@ export async function getLivePrices({ apiKey, originName, destName, country, int
     generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
   };
 
-  let res;
-  try {
-    res = await fetch(`${ENDPOINT}?key=${encodeURIComponent(apiKey)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-  } catch {
-    throw new Error('Network error — check your internet connection.');
+  let lastError = new Error('Gemini API error.');
+  let retried = false;
+
+  for (const model of MODELS) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let res;
+      try {
+        res = await callGemini(model, apiKey, body);
+      } catch {
+        lastError = new Error('Network error — check your internet connection.');
+        retried = true;
+        await sleep(2000 * (attempt + 1));
+        continue;
+      }
+
+      if (res.ok) {
+        const json = await res.json();
+        const text = (json.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
+        if (!text) {
+          lastError = new Error('AI returned an empty response. Try again.');
+          break;
+        }
+        try {
+          const data = parseJson(text);
+          return finalize(data);
+        } catch (e) {
+          if (/no fares/i.test(e.message)) throw e;
+          lastError = new Error('AI response was not valid. Try again.');
+          break;
+        }
+      }
+
+      const t = await res.text().catch(() => '');
+      if (res.status === 400 && /key|api_key/i.test(t)) {
+        throw new Error('Invalid API key. Check it in Settings.');
+      }
+      if (res.status === 404) {
+        lastError = new Error(`Model ${model} not available.`);
+        break; // try next model
+      }
+      if ([429, 500, 502, 503].includes(res.status)) {
+        retried = true;
+        lastError = new Error(
+          `Gemini is overloaded right now (${res.status}). Please wait a minute and retry.`
+        );
+        await sleep(2000 * (attempt + 1));
+        continue;
+      }
+      throw new Error(`Gemini API error (${res.status}).`);
+    }
   }
 
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    if (res.status === 400 && /key/i.test(t)) throw new Error('Invalid API key. Check it in Settings.');
-    if (res.status === 429) throw new Error('Rate limit hit — wait a minute and retry.');
-    throw new Error(`Gemini API error (${res.status}).`);
+  if (retried) {
+    lastError.message += ' Tried twice — Google\'s servers may be busy; retry shortly.';
   }
+  throw lastError;
+}
 
-  const json = await res.json();
-  const text = (json.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
-  if (!text) throw new Error('AI returned an empty response. Try again.');
-
-  const data = parseJson(text);
+function finalize(data) {
   const transport = (Array.isArray(data.transport) ? data.transport : [])
     .filter((t) => t && VALID_MODES.includes(t.mode) && Number.isFinite(Number(t.fare)) && Number(t.fare) > 0)
     .map((t) => ({
