@@ -5,6 +5,9 @@ import {
   STYLE_LABELS,
   DEFAULT_FX,
   FX_API,
+  ORIGINS,
+  ROUTE_FARES,
+  FALLBACK_FARE,
 } from './data/destinations.js';
 
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -42,6 +45,7 @@ export default function App() {
   const [tripName, setTripName] = useState('');
   const [mode, setMode] = useState('domestic');
   const [destinationId, setDestinationId] = useState(DESTINATIONS.find((d) => d.type === 'domestic').id);
+  const [originId, setOriginId] = useState('dhaka');
   const [startDate, setStartDate] = useState(todayPlus(30));
   const [endDate, setEndDate] = useState(todayPlus(33));
   const [travelers, setTravelers] = useState(2);
@@ -68,6 +72,7 @@ export default function App() {
 
   const dest = DESTINATIONS.find((d) => d.id === destinationId) || DESTINATIONS[0];
   const destCurrency = dest.currency;
+  const origin = ORIGINS.find((o) => o.id === originId) || ORIGINS[0];
 
   // Live USD -> BDT rate
   useEffect(() => {
@@ -116,6 +121,15 @@ export default function App() {
     setAppliesOv({});
   };
 
+  const changeOrigin = (id) => {
+    setOriginId(id);
+    setUnitOv((p) => {
+      const n = { ...p };
+      delete n.route;
+      return n;
+    });
+  };
+
   const nights = useMemo(() => {
     if (!startDate || !endDate) return 0;
     const ms = new Date(endDate) - new Date(startDate);
@@ -133,7 +147,19 @@ export default function App() {
     ];
     if (dest.type === 'international') {
       base.push({ id: 'visa', name: 'Visa Fee', unit: costs.visa, qty: 1, appliesTo: 'person', note: 'per person' });
-      base.push({ id: 'flight', name: 'Flights (DAC round trip)', unit: costs.flight, qty: 1, appliesTo: 'person', note: 'per person' });
+      base.push({ id: 'flight', name: `Flights (${origin.airport} round trip)`, unit: costs.flight, qty: 1, appliesTo: 'person', note: 'per person' });
+    } else {
+      const fareKey = `${originId}>${dest.id}`;
+      const fare = ROUTE_FARES[fareKey] !== undefined ? ROUTE_FARES[fareKey] : FALLBACK_FARE;
+      const isEstimate = ROUTE_FARES[fareKey] === undefined;
+      base.unshift({
+        id: 'route',
+        name: `Travel to ${dest.name} (round trip)`,
+        unit: fare,
+        qty: 1,
+        appliesTo: 'person',
+        note: `${origin.name} → ${dest.name}${isEstimate ? ' · estimate, enter your actual fare' : ''}`,
+      });
     }
     return base.map((r) => ({
       ...r,
@@ -141,7 +167,7 @@ export default function App() {
       qty: qtyOv[r.id] !== undefined ? qtyOv[r.id] : r.qty,
       appliesTo: appliesOv[r.id] || r.appliesTo,
     }));
-  }, [costs, nights, days, rooms, dest.type, unitOv, qtyOv, appliesOv]);
+  }, [costs, nights, days, rooms, dest.type, dest.id, dest.name, originId, origin.name, origin.airport, unitOv, qtyOv, appliesOv]);
 
   const allRows = useMemo(
     () => [
@@ -189,7 +215,7 @@ export default function App() {
 
   const saveTrip = () => {
     const snapshot = {
-      tripName, mode, destinationId, startDate, endDate,
+      tripName, mode, destinationId, originId, startDate, endDate,
       travelers: tCount, style, displayCurrency, fx,
       costs, customRows, contingency, unitOv, qtyOv, appliesOv,
     };
@@ -207,6 +233,7 @@ export default function App() {
     setTripName(s.tripName);
     setMode(s.mode);
     setDestinationId(s.destinationId);
+    setOriginId(s.originId || 'dhaka');
     setStartDate(s.startDate);
     setEndDate(s.endDate);
     setTravelers(s.travelers);
@@ -222,7 +249,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const flightUrl = `https://www.google.com/travel/flights?q=flights%20DAC%20to%20${dest.airport}`;
+  const flightUrl = `https://www.google.com/travel/flights?q=flights%20${origin.airport}%20to%20${dest.airport}`;
   const hotelUrl = `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(dest.bookingQuery)}`;
 
   const breakdown = allRows
@@ -258,21 +285,24 @@ export default function App() {
               </button>
             ))}
           </div>
-          <label className="field">
-            <span>Destination</span>
-            <select value={destinationId} onChange={(e) => changeDestination(e.target.value)}>
-              <optgroup label="Bangladesh">
-                {DESTINATIONS.filter((d) => d.type === 'domestic').map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
+          <div className="row2">
+            <label className="field">
+              <span>Destination</span>
+              <select value={destinationId} onChange={(e) => changeDestination(e.target.value)}>
+                {DESTINATIONS.filter((d) => d.type === mode).map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}{d.type === 'international' ? `, ${d.country}` : ''}</option>
                 ))}
-              </optgroup>
-              <optgroup label="International">
-                {DESTINATIONS.filter((d) => d.type === 'international').map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}, {d.country}</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>{mode === 'domestic' ? 'Starting from' : 'Flying from'}</span>
+              <select value={originId} onChange={(e) => changeOrigin(e.target.value)}>
+                {ORIGINS.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}{mode === 'international' ? ` (${o.airport})` : ''}</option>
                 ))}
-              </optgroup>
-            </select>
-          </label>
+              </select>
+            </label>
+          </div>
           <div className="row2">
             <label className="field">
               <span>Start date</span>
@@ -344,7 +374,7 @@ export default function App() {
           )}
           <div className="live-links">
             <span>Check live prices:</span>
-            <a href={flightUrl} target="_blank" rel="noreferrer">Flights DAC → {dest.airport}</a>
+            <a href={flightUrl} target="_blank" rel="noreferrer">Flights {origin.airport} → {dest.airport}</a>
             <a href={hotelUrl} target="_blank" rel="noreferrer">Hotels in {dest.name}</a>
           </div>
         </section>
@@ -485,7 +515,7 @@ export default function App() {
       {/* ---------- Print report ---------- */}
       <div id="print-report">
         <h1>Travel Cost Estimate</h1>
-        <p><strong>{tripName.trim() || `${dest.name} trip`}</strong> · {dest.name}{dest.type === 'international' ? `, ${dest.country}` : ''}</p>
+        <p><strong>{tripName.trim() || `${dest.name} trip`}</strong> · {origin.name} → {dest.name}{dest.type === 'international' ? `, ${dest.country}` : ''}</p>
         <p>{startDate} → {endDate} ({nights} nights) · {tCount} traveler(s) · {STYLE_LABELS[style]} · Shown in {displayCurrency}{displayCurrency === 'BDT' && destCurrency === 'USD' ? ` (1 USD = ${fx} BDT${fxLive ? ', live rate' : ''})` : ''}</p>
         <table>
           <thead><tr><th>Category</th><th>Unit</th><th>Qty</th><th>Applies to</th><th className="right">Total</th></tr></thead>

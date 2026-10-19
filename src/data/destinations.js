@@ -47,3 +47,39 @@ export const DESTINATIONS = [
 
 export const DEFAULT_FX = 121.5; // USD -> BDT fallback when the live rate cannot be fetched
 export const FX_API = 'https://open.er-api.com/v6/latest/USD';
+
+// Origin points: cities for domestic trips, airports for international flights
+export const ORIGINS = [
+  { id: 'dhaka', name: 'Dhaka', airport: 'DAC' },
+  { id: 'chattogram', name: 'Chattogram', airport: 'CGP' },
+  { id: 'sylhet', name: 'Sylhet', airport: 'ZYL' },
+  { id: 'khulna', name: 'Khulna', airport: 'JSR' },
+  { id: 'rajshahi', name: 'Rajshahi', airport: 'RJH' },
+];
+
+// Round-trip intercity fares per person (BDT, AC bus baseline): "originId>destinationId"
+export const ROUTE_FARES = {
+  'dhaka>coxs-bazar': 4000,
+  'dhaka>saint-martin': 5600,
+  'dhaka>sylhet': 1600,
+  'dhaka>sreemangal': 1200,
+  'dhaka>bandarban': 3600,
+  'dhaka>rangamati': 3200,
+  'dhaka>sundarbans': 1800,
+  'dhaka>kuakata': 2200,
+  'dhaka>dhaka': 0,
+  'chattogram>coxs-bazar': 1200,
+  'chattogram>saint-martin': 2800,
+  'chattogram>bandarban': 1000,
+  'chattogram>rangamati': 800,
+  'chattogram>sylhet': 2600,
+  'chattogram>sreemangal': 2200,
+  'chattogram>sundarbans': 3000,
+  'chattogram>kuakata': 3400,
+  'chattogram>dhaka': 1600,
+  'sylhet>sylhet': 500,
+  'sylhet>sreemangal': 600,
+  'sylhet>dhaka': 1600,
+  'sylhet>coxs-bazar': 5400,
+};
+export const FALLBACK_FARE = 2000; // used when a route has no researched fare
