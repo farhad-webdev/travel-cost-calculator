@@ -1,10 +1,35 @@
 // Gemini live-price fetcher with Google Search grounding.
 // The API key is supplied by the user in the app (BYOK) and never leaves their browser.
 
-const MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash']; // fallback chain
+const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'];
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Discover which models this key can actually use (model names change over time)
+async function listModels(apiKey) {
+  const res = await fetch(`${API_BASE}?key=${encodeURIComponent(apiKey)}`);
+  if (!res.ok) throw new Error(`list (${res.status})`);
+  const json = await res.json();
+  return (json.models || [])
+    .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+    .map((m) => String(m.name).replace(/^models\//, ''));
+}
+
+function pickModels(names) {
+  const scored = names.map((n) => {
+    const l = n.toLowerCase();
+    let score = 0;
+    if (l.includes('flash')) score += 10;
+    if (/\bgemini-(\d+)/.test(l)) score += parseInt(l.match(/\bgemini-(\d+)/)[1], 10);
+    if (l.includes('latest')) score += 3;
+    if (l.includes('pro')) score += 2;
+    if (/exp|preview/.test(l)) score -= 5;
+    return { n, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  return scored.map((s) => s.n);
+}
 
 function buildPrompt({ originName, destName, country, international }) {
   const route = international
@@ -51,7 +76,17 @@ export async function getLivePrices({ apiKey, originName, destName, country, int
   let lastError = new Error('Gemini API error.');
   let retried = false;
 
-  for (const model of MODELS) {
+  // Prefer models this key can actually call; fall back to known names
+  let models;
+  try {
+    const discovered = await listModels(apiKey);
+    models = pickModels(discovered).slice(0, 3);
+  } catch {
+    models = [];
+  }
+  if (!models.length) models = [...FALLBACK_MODELS];
+
+  for (const model of models) {
     for (let attempt = 0; attempt < 3; attempt++) {
       let res;
       try {
