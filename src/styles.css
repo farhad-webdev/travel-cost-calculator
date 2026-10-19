@@ -93,6 +93,10 @@ td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: middle;
   border: 1px solid var(--line); background: #fff; border-radius: 8px;
   width: 28px; height: 28px; font-size: 16px; cursor: pointer; color: var(--danger); line-height: 1;
 }
+.modesel {
+  margin-top: 6px; font-size: 13px; padding: 6px 8px;
+  border: 1px solid var(--line); border-radius: 8px; background: #eef3f2; color: var(--ink);
+}
 
 .custom-add { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 4px; }
 .custom-grid { display: grid; grid-template-columns: 2fr 1fr 0.7fr 1fr auto; gap: 8px; align-items: center; }

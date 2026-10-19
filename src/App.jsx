@@ -31,6 +31,8 @@ function suggestedCosts(dest, style) {
     activities: round2(dest.activities * m),
     visa: dest.visa || 0,
     flight: dest.flight || 0,
+    bus: dest.land ? dest.land.bus : 0,
+    train: dest.land ? dest.land.train : 0,
   };
 }
 
@@ -62,6 +64,7 @@ export default function App() {
   const [customRows, setCustomRows] = useState([]);
   const [newCustom, setNewCustom] = useState({ name: '', unit: '', qty: 1, appliesTo: 'group' });
   const [contingency, setContingency] = useState(10);
+  const [getThereMode, setGetThereMode] = useState('flight'); // 'flight' | 'bus' | 'train' (land-reachable destinations)
   const [savedTrips, setSavedTrips] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('tcc-trips-v1') || '[]');
@@ -99,6 +102,7 @@ export default function App() {
     const first = DESTINATIONS.find((d) => d.type === m);
     setDestinationId(first.id);
     setCosts(suggestedCosts(first, style));
+    setGetThereMode('flight');
     setUnitOv({});
     setQtyOv({});
     setAppliesOv({});
@@ -108,6 +112,7 @@ export default function App() {
     const d = DESTINATIONS.find((x) => x.id === id);
     setDestinationId(id);
     setCosts(suggestedCosts(d, style));
+    setGetThereMode('flight');
     setUnitOv({});
     setQtyOv({});
     setAppliesOv({});
@@ -147,7 +152,26 @@ export default function App() {
     ];
     if (dest.type === 'international') {
       base.push({ id: 'visa', name: 'Visa Fee', unit: costs.visa, qty: 1, appliesTo: 'person', note: 'per person' });
-      base.push({ id: 'flight', name: `Flights (${origin.airport} round trip)`, unit: costs.flight, qty: 1, appliesTo: 'person', note: 'per person' });
+      let gUnit, gNote;
+      if (dest.land && getThereMode === 'bus') {
+        gUnit = round2(costs.bus / fx);
+        gNote = `Bus · ৳${Number(costs.bus).toLocaleString('en-US')} round trip`;
+      } else if (dest.land && getThereMode === 'train' && costs.train > 0) {
+        gUnit = round2(costs.train / fx);
+        gNote = `Train · ৳${Number(costs.train).toLocaleString('en-US')} round trip`;
+      } else {
+        gUnit = costs.flight;
+        gNote = `Flight · $${Number(costs.flight).toLocaleString('en-US')} round trip`;
+      }
+      base.push({
+        id: 'getthere',
+        name: `Getting there (${origin.airport} round trip)`,
+        unit: gUnit,
+        qty: 1,
+        appliesTo: 'person',
+        note: gNote,
+        hasMode: !!dest.land,
+      });
     } else {
       const fareKey = `${originId}>${dest.id}`;
       const fare = ROUTE_FARES[fareKey] !== undefined ? ROUTE_FARES[fareKey] : FALLBACK_FARE;
@@ -167,7 +191,7 @@ export default function App() {
       qty: qtyOv[r.id] !== undefined ? qtyOv[r.id] : r.qty,
       appliesTo: appliesOv[r.id] || r.appliesTo,
     }));
-  }, [costs, nights, days, rooms, dest.type, dest.id, dest.name, originId, origin.name, origin.airport, unitOv, qtyOv, appliesOv]);
+  }, [costs, nights, days, rooms, dest.type, dest.id, dest.name, originId, origin.name, origin.airport, getThereMode, fx, unitOv, qtyOv, appliesOv]);
 
   const allRows = useMemo(
     () => [
@@ -215,7 +239,7 @@ export default function App() {
 
   const saveTrip = () => {
     const snapshot = {
-      tripName, mode, destinationId, originId, startDate, endDate,
+      tripName, mode, destinationId, originId, getThereMode, startDate, endDate,
       travelers: tCount, style, displayCurrency, fx,
       costs, customRows, contingency, unitOv, qtyOv, appliesOv,
     };
@@ -234,6 +258,7 @@ export default function App() {
     setMode(s.mode);
     setDestinationId(s.destinationId);
     setOriginId(s.originId || 'dhaka');
+    setGetThereMode(s.getThereMode || 'flight');
     setStartDate(s.startDate);
     setEndDate(s.endDate);
     setTravelers(s.travelers);
@@ -366,10 +391,26 @@ export default function App() {
                   onChange={(e) => setCosts((p) => ({ ...p, visa: num(e.target.value, 0) }))} />
               </label>
               <label className="field inline">
-                <span>Flights DAC round trip (per person)</span>
+                <span>Flights ({origin.airport} round trip, per person)</span>
                 <input type="number" min="0" step="0.01" value={costs.flight}
                   onChange={(e) => setCosts((p) => ({ ...p, flight: num(e.target.value, 0) }))} />
               </label>
+              {dest.land && (
+                <>
+                  <label className="field inline">
+                    <span>Bus fare (round trip, per person, BDT)</span>
+                    <input type="number" min="0" step="0.01" value={costs.bus}
+                      onChange={(e) => setCosts((p) => ({ ...p, bus: num(e.target.value, 0) }))} />
+                  </label>
+                  {dest.land.train > 0 && (
+                    <label className="field inline">
+                      <span>Train fare (round trip, per person, BDT)</span>
+                      <input type="number" min="0" step="0.01" value={costs.train}
+                        onChange={(e) => setCosts((p) => ({ ...p, train: num(e.target.value, 0) }))} />
+                    </label>
+                  )}
+                </>
+              )}
             </>
           )}
           <div className="live-links">
@@ -395,6 +436,20 @@ export default function App() {
                     <td>
                       <div className="cellname">{r.name}</div>
                       <div className="cellnote">{r.note}</div>
+                      {r.hasMode && (
+                        <select
+                          className="modesel"
+                          value={getThereMode}
+                          onChange={(e) => {
+                            setGetThereMode(e.target.value);
+                            setUnitOv((p) => { const n = { ...p }; delete n.getthere; return n; });
+                          }}
+                        >
+                          <option value="flight">Flight</option>
+                          <option value="bus">Bus</option>
+                          {dest.land.train > 0 && <option value="train">Train</option>}
+                        </select>
+                      )}
                     </td>
                     <td>
                       <input
